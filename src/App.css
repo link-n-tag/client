@@ -199,6 +199,7 @@ textarea {
 .link-edit-container {
   position: relative;
   flex: 1;
+  min-width: 300px;
 }
 
 .link-input {
@@ -326,8 +327,10 @@ textarea {
 
 .link-edit-input {
   flex: 1;
-  padding: 4px 8px;
-  font-size: 0.95rem;
+  min-width: 300px;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 1rem;
   border: 1px solid var(--accent-color);
   border-radius: 4px;
   background: var(--bg-tertiary);
@@ -447,6 +450,14 @@ textarea {
   
   .link-favicon {
     flex-shrink: 0;
+  }
+
+  .link-edit-container {
+    min-width: 200px;
+  }
+
+  .link-edit-input {
+    min-width: 200px;
   }
 
   .link-delete {
