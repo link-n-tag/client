@@ -1,7 +1,7 @@
 {
   "name": "client",
   "version": "0.1.0",
-  "homepage": "https://link-n-tag.github.io/vibe/",
+  "homepage": "https://link-n-tag.github.io/",
   "private": true,
   "dependencies": {
     "@testing-library/dom": "^10.4.1",
