@@ -1,6 +1,7 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "link-n-tag",
+  "name": "link-n-tag - Link Manager",
+  "description": "A simple and beautiful web application to store and organize your favorite weblinks",
   "icons": [
     {
       "src": "favicon.ico",
@@ -8,18 +9,28 @@
       "type": "image/x-icon"
     },
     {
+      "src": "favicon-32x32.png",
+      "type": "image/png",
+      "sizes": "32x32"
+    },
+    {
       "src": "logo192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "logo512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
   "start_url": ".",
+  "scope": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "orientation": "portrait-primary",
+  "theme_color": "#1a1a1a",
+  "background_color": "#1a1a1a",
+  "categories": ["productivity", "utilities"]
 }
