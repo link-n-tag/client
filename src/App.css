@@ -222,6 +222,48 @@ textarea {
   border-bottom-color: var(--accent-color);
 }
 
+.link-input-container.fetching {
+  position: relative;
+}
+
+.link-input-container.fetching::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--accent-color);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes spin {
+  0% {
+    transform: translateY(-50%) rotate(0deg);
+  }
+  100% {
+    transform: translateY(-50%) rotate(360deg);
+  }
+}
+
+.link-input.fetching::placeholder {
+  animation: fetching-pulse 1.5s ease-in-out infinite;
+  color: var(--accent-color);
+}
+
+@keyframes fetching-pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .empty-state {
   text-align: center;
   padding: 40px 20px;

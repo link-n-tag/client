@@ -9,6 +9,7 @@ function App() {
   const [editingText, setEditingText] = useState('');
   const [newLinkText, setNewLinkText] = useState('');
   const [clipboardUrl, setClipboardUrl] = useState('');
+  const [fetchingTitle, setFetchingTitle] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
   const [draggedTag, setDraggedTag] = useState(null);
   const [dragOverLinkId, setDragOverLinkId] = useState(null);
@@ -20,6 +21,119 @@ function App() {
   const [autocompleteInputType, setAutocompleteInputType] = useState(null); // 'new' or 'edit'
   const inputRef = useRef(null);
   const editingInputRef = useRef(null);
+  const recentlyProcessedUrls = useRef(new Set()); // Track URLs we've recently processed
+
+  // Fetch page title from URL
+  const fetchPageTitle = useCallback(async (url) => {
+    try {
+      // Normalize URL to ensure we're fetching the exact page
+      let targetUrl = url.trim();
+      if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+        targetUrl = 'https://' + targetUrl;
+      }
+      
+      // Try multiple CORS proxy services as fallbacks
+      const proxyServices = [
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+        `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
+      ];
+      
+      let html = null;
+      let lastError = null;
+      
+      // Try each proxy service until one works
+      for (const proxyUrl of proxyServices) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+          
+          const response = await fetch(proxyUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'text/html',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+            signal: controller.signal,
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          html = await response.text();
+          
+          // Validate that we got actual HTML content (not an error page)
+          if (html && html.length > 100 && html.includes('<title')) {
+            break; // Success, exit loop
+          }
+        } catch (error) {
+          lastError = error;
+          // Continue to next proxy service
+          continue;
+        }
+      }
+      
+      if (!html) {
+        throw lastError || new Error('All proxy services failed');
+      }
+      
+      // Try multiple methods to extract title (in order of preference)
+      let title = null;
+      
+      // 1. Try Open Graph title (most reliable for specific pages)
+      const ogTitleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i);
+      if (ogTitleMatch && ogTitleMatch[1]) {
+        title = ogTitleMatch[1];
+      }
+      
+      // 2. Try Twitter card title
+      if (!title) {
+        const twitterTitleMatch = html.match(/<meta\s+name=["']twitter:title["']\s+content=["']([^"']+)["']/i);
+        if (twitterTitleMatch && twitterTitleMatch[1]) {
+          title = twitterTitleMatch[1];
+        }
+      }
+      
+      // 3. Try standard HTML title tag
+      if (!title) {
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        if (titleMatch && titleMatch[1]) {
+          title = titleMatch[1];
+        }
+      }
+      
+      if (title) {
+        // Clean up the title: decode HTML entities, trim whitespace
+        title = title
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/&apos;/g, "'")
+          .replace(/&#x27;/g, "'")
+          .replace(/&#x2F;/g, '/')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        // Limit title length
+        if (title.length > 100) {
+          title = title.substring(0, 100) + '...';
+        }
+        
+        return title;
+      }
+    } catch (error) {
+      // CORS or other errors - silently fail and return null
+      // The user can still manually enter the title
+      console.debug('Could not fetch page title:', error.message);
+    }
+    return null;
+  }, []);
 
   const checkClipboard = useCallback(async () => {
     try {
@@ -27,9 +141,51 @@ function App() {
       const urlPattern = /^https?:\/\/.+/i;
       if (urlPattern.test(text.trim())) {
         const newUrl = text.trim();
+        
+        // Check if we've recently processed this URL (to avoid re-fetching after creating a link)
+        if (recentlyProcessedUrls.current.has(newUrl)) {
+          // Don't show the input if we just processed this URL
+          setClipboardUrl('');
+          return '';
+        }
+        
+        // Check if this URL already exists in our links
+        const urlExists = links.some(link => link.url === newUrl);
+        if (urlExists) {
+          // URL already exists, don't show the input
+          setClipboardUrl('');
+          // Mark as processed to prevent future checks
+          recentlyProcessedUrls.current.add(newUrl);
+          // Clear the processed flag after 30 seconds
+          setTimeout(() => {
+            recentlyProcessedUrls.current.delete(newUrl);
+          }, 30000);
+          return '';
+        }
+        
         // Only update if it's different from current clipboardUrl
         setClipboardUrl(prevUrl => {
           if (newUrl !== prevUrl) {
+            // Clear any existing input when a new URL is detected
+            setNewLinkText('');
+            // Fetch title for the new URL
+            setFetchingTitle(true);
+            fetchPageTitle(newUrl).then(title => {
+              // Only pre-fill if input is still empty (user hasn't started typing)
+              setNewLinkText(prev => {
+                if (!prev.trim() && title) {
+                  // Set title first, then stop fetching
+                  setTimeout(() => setFetchingTitle(false), 100);
+                  return title;
+                } else {
+                  // No title fetched or user started typing, stop fetching
+                  setFetchingTitle(false);
+                  return prev;
+                }
+              });
+            }).catch(() => {
+              setFetchingTitle(false);
+            });
             return newUrl;
           }
           return prevUrl;
@@ -48,7 +204,7 @@ function App() {
       // Clipboard access might fail, ignore silently
     }
     return '';
-  }, []);
+  }, [fetchPageTitle, links]);
 
   // Read query parameters on mount and handle browser navigation
   useEffect(() => {
@@ -186,6 +342,7 @@ function App() {
       return match ? match[1] : url;
     }
   };
+
 
 
   const readClipboard = async () => {
@@ -480,8 +637,15 @@ function App() {
 
       saveLinks([...links, newLink]);
       setNewLinkText('');
-      setClipboardUrl('');
+      setClipboardUrl(''); // Clear clipboard URL to hide the input
       setShowAutocomplete(false);
+      
+      // Mark this URL as recently processed to prevent re-fetching and showing input
+      recentlyProcessedUrls.current.add(url);
+      // Clear the processed flag after 30 seconds (in case user wants to add it again)
+      setTimeout(() => {
+        recentlyProcessedUrls.current.delete(url);
+      }, 30000);
     }
   };
 
@@ -957,12 +1121,16 @@ function App() {
 
         <div className="links-container">
           {clipboardUrl && (
-            <div className="link-input-container">
+            <div className={`link-input-container ${fetchingTitle ? 'fetching' : ''}`}>
               <input
                 ref={inputRef}
                 type="text"
-                className="link-input"
-                placeholder={`link copied from "${getDomainFromUrl(clipboardUrl)}", title here #tag1 #tag2`}
+                className={`link-input ${fetchingTitle ? 'fetching' : ''}`}
+                placeholder={fetchingTitle 
+                  ? `fetching title from "${getDomainFromUrl(clipboardUrl)}"...` 
+                  : newLinkText.trim()
+                    ? `add tags: #tag1 #tag2`
+                    : `link copied from "${getDomainFromUrl(clipboardUrl)}", title here #tag1 #tag2`}
                 value={newLinkText}
                 onChange={handleInputChange}
                 onFocus={handleInputFocus}
