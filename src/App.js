@@ -5,12 +5,14 @@ const STORAGE_KEY = 'link-tag-storage';
 
 function App() {
   const [links, setLinks] = useState([]);
-  const [editingLinkId, setEditingLinkId] = useState(null);
-  const [editingText, setEditingText] = useState('');
-  const [newLinkText, setNewLinkText] = useState('');
-  const [clipboardUrl, setClipboardUrl] = useState('');
+  const [editingLinkId, setEditingLinkId] = useState(null); // Track which link is being edited
+  const [showModal, setShowModal] = useState(false);
+  const [modalUrl, setModalUrl] = useState('');
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalTags, setModalTags] = useState('');
   const [fetchingTitle, setFetchingTitle] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [draggedTag, setDraggedTag] = useState(null);
   const [dragOverLinkId, setDragOverLinkId] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -18,10 +20,8 @@ function App() {
   const [autocompleteSuggestions, setAutocompleteSuggestions] = useState([]);
   const [autocompleteIndex, setAutocompleteIndex] = useState(-1);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
-  const [autocompleteInputType, setAutocompleteInputType] = useState(null); // 'new' or 'edit'
-  const inputRef = useRef(null);
-  const editingInputRef = useRef(null);
-  const recentlyProcessedUrls = useRef(new Set()); // Track URLs we've recently processed
+  const [autocompleteInputType, setAutocompleteInputType] = useState(null); // 'modal'
+  const modalTitleRef = useRef(null);
 
   // Fetch page title from URL
   const fetchPageTitle = useCallback(async (url) => {
@@ -135,76 +135,52 @@ function App() {
     return null;
   }, []);
 
-  const checkClipboard = useCallback(async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      const urlPattern = /^https?:\/\/.+/i;
-      if (urlPattern.test(text.trim())) {
-        const newUrl = text.trim();
-        
-        // Check if we've recently processed this URL (to avoid re-fetching after creating a link)
-        if (recentlyProcessedUrls.current.has(newUrl)) {
-          // Don't show the input if we just processed this URL
-          setClipboardUrl('');
-          return '';
-        }
-        
-        // Check if this URL already exists in our links
-        const urlExists = links.some(link => link.url === newUrl);
-        if (urlExists) {
-          // URL already exists, don't show the input
-          setClipboardUrl('');
-          // Mark as processed to prevent future checks
-          recentlyProcessedUrls.current.add(newUrl);
-          // Clear the processed flag after 30 seconds
-          setTimeout(() => {
-            recentlyProcessedUrls.current.delete(newUrl);
-          }, 30000);
-          return '';
-        }
-        
-        // Only update if it's different from current clipboardUrl
-        setClipboardUrl(prevUrl => {
-          if (newUrl !== prevUrl) {
-            // Clear any existing input when a new URL is detected
-            setNewLinkText('');
-            // Fetch title for the new URL
-            setFetchingTitle(true);
-            fetchPageTitle(newUrl).then(title => {
-              // Only pre-fill if input is still empty (user hasn't started typing)
-              setNewLinkText(prev => {
-                if (!prev.trim() && title) {
-                  // Set title first, then stop fetching
-                  setTimeout(() => setFetchingTitle(false), 100);
-                  return title;
-                } else {
-                  // No title fetched or user started typing, stop fetching
-                  setFetchingTitle(false);
-                  return prev;
-                }
-              });
-            }).catch(() => {
-              setFetchingTitle(false);
-            });
-            return newUrl;
-          }
-          return prevUrl;
-        });
-        return newUrl;
-      } else {
-        // If clipboard doesn't contain a URL, clear it
-        setClipboardUrl(prevUrl => {
-          if (prevUrl) {
-            return '';
-          }
-          return prevUrl;
-        });
+  // Handle paste event to open modal
+  const handlePaste = useCallback(async (e) => {
+    const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+    const urlPattern = /^https?:\/\/.+/i;
+    
+    if (urlPattern.test(pastedText.trim())) {
+      e.preventDefault();
+      const url = pastedText.trim();
+      
+      // Clear search term
+      setSearchTerm('');
+      
+      // Check if URL already exists - if so, open it for editing in modal
+      const existingLink = links.find(link => link.url === url);
+      if (existingLink) {
+        // Open existing link for editing in modal
+        const tagsDisplay = existingLink.tags 
+          ? existingLink.tags.split(',').map(t => `#${t.trim()}`).join(' ')
+          : '';
+        setEditingLinkId(existingLink.id);
+        setModalUrl(existingLink.url);
+        setModalTitle(existingLink.title);
+        setModalTags(tagsDisplay);
+        setShowModal(true);
+        return;
       }
-    } catch (error) {
-      // Clipboard access might fail, ignore silently
+      
+      // Open modal with URL (new link)
+      setEditingLinkId(null); // Ensure we're creating, not editing
+      setModalUrl(url);
+      setModalTitle('');
+      setModalTags('');
+      setShowModal(true);
+      setFetchingTitle(true);
+      
+      // Fetch title automatically
+      fetchPageTitle(url).then(title => {
+        setFetchingTitle(false);
+        if (title) {
+          setModalTitle(title);
+        }
+      }).catch(() => {
+        setFetchingTitle(false);
+      });
     }
-    return '';
-  }, [fetchPageTitle, links]);
+  }, [links, fetchPageTitle]);
 
   // Read query parameters on mount and handle browser navigation
   useEffect(() => {
@@ -246,10 +222,63 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    // Check clipboard on mount
-    checkClipboard();
-  }, [checkClipboard]);
+  // Handle modal save
+  const handleModalSave = () => {
+    if (!modalUrl.trim() || !modalTitle.trim()) {
+      return;
+    }
+    
+    // Parse tags
+    const tagParts = modalTags.trim().split(/\s+/).filter(t => t.startsWith('#'));
+    const normalizedTags = tagParts
+      .map(tag => {
+        const tagWithoutHash = tag.startsWith('#') ? tag.slice(1) : tag;
+        return tagWithoutHash ? normalizeTag(tagWithoutHash) : '';
+      })
+      .filter(t => t)
+      .join(', ');
+    
+    if (editingLinkId) {
+      // Update existing link
+      const updatedLinks = links.map(link => 
+        link.id === editingLinkId
+          ? {
+              ...link,
+              title: modalTitle.trim(),
+              url: modalUrl.trim(),
+              tags: normalizedTags || ''
+            }
+          : link
+      );
+      saveLinks(updatedLinks);
+      setEditingLinkId(null);
+    } else {
+      // Create new link
+      const newLink = {
+        id: Date.now(),
+        title: modalTitle.trim(),
+        url: modalUrl.trim(),
+        tags: normalizedTags || '',
+        created_at: new Date().toISOString()
+      };
+      saveLinks([...links, newLink]);
+    }
+    
+    setShowModal(false);
+    setModalUrl('');
+    setModalTitle('');
+    setModalTags('');
+  };
+  
+  // Handle modal cancel
+  const handleModalCancel = () => {
+    setShowModal(false);
+    setModalUrl('');
+    setModalTitle('');
+    setModalTags('');
+    setFetchingTitle(false);
+    setEditingLinkId(null);
+  };
 
   const toggleTheme = () => {
     const newTheme = !isDarkMode;
@@ -283,33 +312,6 @@ function App() {
     saveLinks(updatedLinks);
   };
 
-  // Check clipboard periodically and on user interactions
-  useEffect(() => {
-    // Check immediately
-    checkClipboard();
-
-    // Set up periodic checking (every 1 second)
-    const interval = setInterval(checkClipboard, 1000);
-
-    // Also check on user interactions
-    const handleUserInteraction = () => {
-      checkClipboard();
-    };
-
-    window.addEventListener('focus', handleUserInteraction);
-    window.addEventListener('click', handleUserInteraction);
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) {
-        checkClipboard();
-      }
-    });
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', handleUserInteraction);
-      window.removeEventListener('click', handleUserInteraction);
-    };
-  }, [checkClipboard]);
 
   const loadLinks = () => {
     try {
@@ -345,34 +347,8 @@ function App() {
 
 
 
-  const readClipboard = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      const urlPattern = /^https?:\/\/.+/i;
-      if (urlPattern.test(text.trim())) {
-        return text.trim();
-      }
-    } catch (error) {
-      console.error('Error reading clipboard:', error);
-    }
-    return '';
-  };
 
-  const handleInputFocus = async () => {
-    await checkClipboard();
-  };
 
-  const handleInputChange = (e) => {
-    const value = e.target.value;
-    setNewLinkText(value);
-    updateAutocomplete(value, e.target, 'new');
-  };
-
-  const handleEditingInputChange = (e) => {
-    const value = e.target.value;
-    setEditingText(value);
-    updateAutocomplete(value, e.target, 'edit');
-  };
 
   const updateAutocomplete = (text, inputElement, inputType) => {
     if (!inputElement) return;
@@ -445,7 +421,7 @@ function App() {
     }
   };
 
-  const insertAutocompleteSuggestion = (suggestion, inputValue, inputElement, isEditing = false) => {
+  const insertAutocompleteSuggestion = (suggestion, inputValue, inputElement, inputType = 'modal') => {
     if (!inputElement) return;
     
     const cursorPosition = inputElement.selectionStart;
@@ -462,10 +438,24 @@ function App() {
       ' ' + 
       textAfterCursor;
     
-    if (isEditing) {
-      setEditingText(newText);
-    } else {
-      setNewLinkText(newText);
+    if (inputType === 'modal') {
+      // Parse the combined input to separate title and tags
+      const words = newText.trim().split(/\s+/);
+      const titleParts = [];
+      const tagParts = [];
+      
+      words.forEach(word => {
+        if (word.startsWith('#')) {
+          tagParts.push(word);
+        } else {
+          titleParts.push(word);
+        }
+      });
+      
+      setModalTitle(titleParts.join(' '));
+      setModalTags(tagParts.join(' '));
+    } else if (inputType === 'modal-tags') {
+      setModalTags(newText);
     }
     
     setShowAutocomplete(false);
@@ -542,173 +532,9 @@ function App() {
     return cleanTag;
   };
 
-  const parseLinkText = (text) => {
-    if (!text) {
-      return { title: '', tags: '' };
-    }
-    
-    // Split by spaces and identify tags (words starting with #)
-    const words = text.trim().split(/\s+/);
-    const titleParts = [];
-    const tagParts = [];
-    
-    words.forEach(word => {
-      if (word.startsWith('#')) {
-        // It's a tag
-        tagParts.push(word);
-      } else {
-        // It's part of the title
-        titleParts.push(word);
-      }
-    });
-    
-    const title = titleParts.join(' ');
-    const normalizedTags = tagParts
-      .map(tag => {
-        // Remove # prefix and normalize
-        const tagWithoutHash = tag.startsWith('#') ? tag.slice(1) : tag;
-        return tagWithoutHash ? normalizeTag(tagWithoutHash) : '';
-      })
-      .filter(t => t)
-      .join(', ');
-    
-    return {
-      title: title || '',
-      tags: normalizedTags
-    };
-  };
 
 
-  const handleCreateLink = async (e) => {
-    // Handle autocomplete navigation
-    if (showAutocomplete && autocompleteSuggestions.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setAutocompleteIndex(prev => 
-          prev < autocompleteSuggestions.length - 1 ? prev + 1 : prev
-        );
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setAutocompleteIndex(prev => prev > 0 ? prev - 1 : -1);
-        return;
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        const selectedIndex = autocompleteIndex >= 0 ? autocompleteIndex : 0;
-        const suggestion = autocompleteSuggestions[selectedIndex];
-        insertAutocompleteSuggestion(suggestion, newLinkText, inputRef.current, false);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setShowAutocomplete(false);
-        return;
-      }
-    }
-    
-    if (e.key === 'Enter' && newLinkText.trim() && !showAutocomplete) {
-      e.preventDefault();
-      let url = clipboardUrl;
-      
-      if (!url) {
-        url = await readClipboard();
-      }
-      
-      if (!newLinkText.trim() || !url) {
-        return;
-      }
 
-      // Parse title and tags from input (format: "title #tag1 #tag2")
-      const { title, tags } = parseLinkText(newLinkText.trim());
-
-      if (!title) {
-        return;
-      }
-
-      const newLink = {
-        id: Date.now(),
-        title,
-        url,
-        tags: tags || '',
-        created_at: new Date().toISOString()
-      };
-
-      saveLinks([...links, newLink]);
-      setNewLinkText('');
-      setClipboardUrl(''); // Clear clipboard URL to hide the input
-      setShowAutocomplete(false);
-      
-      // Mark this URL as recently processed to prevent re-fetching and showing input
-      recentlyProcessedUrls.current.add(url);
-      // Clear the processed flag after 30 seconds (in case user wants to add it again)
-      setTimeout(() => {
-        recentlyProcessedUrls.current.delete(url);
-      }, 30000);
-    }
-  };
-
-  const handleEditKeyDown = (e, link) => {
-    // Handle autocomplete navigation
-    if (showAutocomplete && autocompleteSuggestions.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setAutocompleteIndex(prev => 
-          prev < autocompleteSuggestions.length - 1 ? prev + 1 : prev
-        );
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setAutocompleteIndex(prev => prev > 0 ? prev - 1 : -1);
-        return;
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        const selectedIndex = autocompleteIndex >= 0 ? autocompleteIndex : 0;
-        const suggestion = autocompleteSuggestions[selectedIndex];
-        insertAutocompleteSuggestion(suggestion, editingText, editingInputRef.current, true);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setShowAutocomplete(false);
-        return;
-      }
-    }
-    
-    if (e.key === 'Enter' && editingText.trim() && !showAutocomplete) {
-      e.preventDefault();
-      handleUpdateLink(link.id, editingText);
-    } else if (e.key === 'Escape') {
-      setEditingLinkId(null);
-      setEditingText('');
-      setShowAutocomplete(false);
-    }
-  };
-
-  const handleUpdateLink = (id, newText) => {
-    const { title, tags } = parseLinkText(newText);
-    
-    if (!title) {
-      return;
-    }
-
-    const updatedLinks = links.map(link => {
-      if (link.id === id) {
-        return {
-          ...link,
-          title,
-          tags: tags || ''
-        };
-      }
-      return link;
-    });
-
-    saveLinks(updatedLinks);
-    setEditingLinkId(null);
-  };
 
   const handleDelete = (id, e) => {
     e.stopPropagation();
@@ -717,12 +543,15 @@ function App() {
   };
 
   const handleLinkClick = (link) => {
+    // Open modal for editing
     const tagsDisplay = link.tags 
       ? link.tags.split(',').map(t => `#${t.trim()}`).join(' ')
       : '';
-    const linkText = `${link.title}${tagsDisplay ? ' ' + tagsDisplay : ''}`;
     setEditingLinkId(link.id);
-    setEditingText(linkText);
+    setModalUrl(link.url);
+    setModalTitle(link.title);
+    setModalTags(tagsDisplay);
+    setShowModal(true);
   };
 
   // Drag and Drop handlers
@@ -770,9 +599,12 @@ function App() {
         // Don't add if tag already exists
         if (!existingTags.some(t => t.toLowerCase() === normalizedTag.toLowerCase())) {
           existingTags.push(normalizedTag);
-          const tagsDisplay = existingTags.map(t => `#${t}`).join(' ');
-          const linkText = `${link.title} ${tagsDisplay}`;
-          handleUpdateLink(linkId, linkText);
+          const updatedLinks = links.map(l => 
+            l.id === linkId
+              ? { ...l, tags: existingTags.join(', ') }
+              : l
+          );
+          saveLinks(updatedLinks);
         }
       }
     }
@@ -1006,6 +838,7 @@ function App() {
   };
 
   const filteredLinks = links.filter(link => {
+    // Filter by selected tags
     if (selectedTags.length > 0) {
       const selectedTagsLower = selectedTags.map(t => t.toLowerCase());
       
@@ -1021,24 +854,45 @@ function App() {
         if (otherTags.length > 0) {
           return false; // Can't have both noTag and other tags
         }
-        return true;
+      } else {
+        // Get all tags for this link (regular + domain)
+        const linkTags = link.tags ? link.tags.split(',').map(t => t.trim().toLowerCase()) : [];
+        const domainTag = getDomainTag(link.url);
+        if (domainTag) {
+          linkTags.push(domainTag.toLowerCase());
+        }
+        
+        // Check if link has all selected tags
+        const hasAllSelectedTags = selectedTagsLower.every(selectedTag => 
+          linkTags.includes(selectedTag)
+        );
+        if (!hasAllSelectedTags) {
+          return false;
+        }
       }
+    }
+    
+    // Filter by search term (searches in title and tags)
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase().trim();
+      const titleMatch = link.title.toLowerCase().includes(searchLower);
       
-      // Get all tags for this link (regular + domain)
+      // Check tags
       const linkTags = link.tags ? link.tags.split(',').map(t => t.trim().toLowerCase()) : [];
       const domainTag = getDomainTag(link.url);
       if (domainTag) {
         linkTags.push(domainTag.toLowerCase());
       }
+      const tagMatch = linkTags.some(tag => tag.includes(searchLower));
       
-      // Check if link has all selected tags
-      const hasAllSelectedTags = selectedTagsLower.every(selectedTag => 
-        linkTags.includes(selectedTag)
-      );
-      if (!hasAllSelectedTags) {
+      // Check URL
+      const urlMatch = link.url.toLowerCase().includes(searchLower);
+      
+      if (!titleMatch && !tagMatch && !urlMatch) {
         return false;
       }
     }
+    
     return true;
   }).sort((a, b) => {
     // Sort: links without tags first, then by creation date (newest first)
@@ -1120,43 +974,67 @@ function App() {
         })()}
 
         <div className="links-container">
-          {clipboardUrl && (
-            <div className={`link-input-container ${fetchingTitle ? 'fetching' : ''}`}>
-              <input
-                ref={inputRef}
-                type="text"
-                className={`link-input ${fetchingTitle ? 'fetching' : ''}`}
-                placeholder={fetchingTitle 
-                  ? `fetching title from "${getDomainFromUrl(clipboardUrl)}"...` 
-                  : newLinkText.trim()
-                    ? `add tags: #tag1 #tag2`
-                    : `link copied from "${getDomainFromUrl(clipboardUrl)}", title here #tag1 #tag2`}
-                value={newLinkText}
-                onChange={handleInputChange}
-                onFocus={handleInputFocus}
-                onKeyDown={handleCreateLink}
-              />
-              {showAutocomplete && autocompleteSuggestions.length > 0 && autocompleteInputType === 'new' && (
-                <div className="autocomplete-dropdown">
-                  {autocompleteSuggestions.map((suggestion, index) => (
-                    <div
-                      key={suggestion}
-                      className={`autocomplete-item ${index === autocompleteIndex ? 'selected' : ''}`}
-                      onClick={() => insertAutocompleteSuggestion(suggestion, newLinkText, inputRef.current, false)}
-                      onMouseEnter={() => setAutocompleteIndex(index)}
-                    >
-                      #{suggestion}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          <div className="paste-area-container">
+            <input
+              type="text"
+              className="paste-area"
+              placeholder="Paste URL to add link or type to search..."
+              value={searchTerm}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSearchTerm(value);
+              }}
+              onPaste={handlePaste}
+              onKeyDown={(e) => {
+                // If Enter is pressed and it's a URL, open modal
+                if (e.key === 'Enter') {
+                  const urlPattern = /^https?:\/\/.+/i;
+                  if (urlPattern.test(searchTerm.trim())) {
+                    e.preventDefault();
+                    const url = searchTerm.trim();
+                    
+                    // Check if URL already exists
+                    const existingLink = links.find(link => link.url === url);
+                    if (existingLink) {
+                      const tagsDisplay = existingLink.tags 
+                        ? existingLink.tags.split(',').map(t => `#${t.trim()}`).join(' ')
+                        : '';
+                      setEditingLinkId(existingLink.id);
+                      setModalUrl(existingLink.url);
+                      setModalTitle(existingLink.title);
+                      setModalTags(tagsDisplay);
+                      setShowModal(true);
+                      setSearchTerm('');
+                    } else {
+                      setEditingLinkId(null);
+                      setModalUrl(url);
+                      setModalTitle('');
+                      setModalTags('');
+                      setShowModal(true);
+                      setFetchingTitle(true);
+                      setSearchTerm('');
+                      
+                      fetchPageTitle(url).then(title => {
+                        setFetchingTitle(false);
+                        if (title) {
+                          setModalTitle(title);
+                        }
+                      }).catch(() => {
+                        setFetchingTitle(false);
+                      });
+                    }
+                  }
+                }
+              }}
+            />
+          </div>
 
           {filteredLinks.length === 0 ? (
             <div className="empty-state">
               <p>
-                {selectedTags.length > 0
+                {searchTerm.trim()
+                  ? `No links found matching "${searchTerm}"`
+                  : selectedTags.length > 0
                   ? `No links found with tags: ${selectedTags.map(t => `"${t}"`).join(', ')}`
                   : 'No links yet. Add your first link!'}
               </p>
@@ -1166,122 +1044,83 @@ function App() {
               {(() => {
                 const tagCardinality = getTagCardinality();
                 return filteredLinks.map((link, index) => {
-                  const isEditing = editingLinkId === link.id;
                   const isEven = index % 2 === 0;
                 
                 return (
                   <div 
-                    key={link.id} 
-                    className={`link-item ${isEditing ? 'editing' : ''} ${dragOverLinkId === link.id ? 'drag-over' : ''} ${isEven ? 'even' : 'odd'}`}
-                    onClick={() => !isEditing && handleLinkClick(link)}
+                    key={link.id}
+                    data-link-id={link.id}
+                    className={`link-item ${dragOverLinkId === link.id ? 'drag-over' : ''} ${isEven ? 'even' : 'odd'}`}
+                    onClick={() => handleLinkClick(link)}
                     onDragOver={(e) => handleLinkDragOver(e, link.id)}
                     onDragLeave={handleLinkDragLeave}
                     onDrop={(e) => handleLinkDrop(e, link.id)}
                   >
-                    {isEditing ? (
-                      <div className="link-edit-container">
-                        <input
-                          ref={editingInputRef}
-                          type="text"
-                          className="link-edit-input"
-                          value={editingText}
-                          onChange={handleEditingInputChange}
-                          onKeyDown={(e) => handleEditKeyDown(e, link)}
-                          onBlur={() => {
-                            if (editingText.trim()) {
-                              handleUpdateLink(link.id, editingText);
-                            } else {
-                              setEditingLinkId(null);
-                              setEditingText('');
-                            }
-                            setShowAutocomplete(false);
-                          }}
-                          autoFocus
-                        />
-                        {showAutocomplete && autocompleteSuggestions.length > 0 && autocompleteInputType === 'edit' && (
-                          <div className="autocomplete-dropdown">
-                            {autocompleteSuggestions.map((suggestion, index) => (
-                              <div
-                                key={suggestion}
-                                className={`autocomplete-item ${index === autocompleteIndex ? 'selected' : ''}`}
-                                onClick={() => insertAutocompleteSuggestion(suggestion, editingText, editingInputRef.current, true)}
-                                onMouseEnter={() => setAutocompleteIndex(index)}
-                              >
-                                #{suggestion}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <>
-                        <img 
-                          src={getFaviconUrl(link.url)} 
-                          alt="" 
-                          className="link-favicon"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
-                        />
-                        <a 
-                          href={link.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="link-url"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {link.title}
-                        </a>
-                        <div className="link-item-tags">
-                          {(() => {
-                            const domainTag = getDomainTag(link.url);
-                            const regularTags = link.tags && link.tags.trim() 
-                              ? link.tags.split(',').map(t => t.trim()).filter(t => t)
-                              : [];
-                            
-                            if (!domainTag && regularTags.length === 0) {
-                              return <span className="link-tag no-tag">#noTag</span>;
-                            }
-                            
-                            // Sort regular tags by cardinality (highest to lowest)
-                            const sortedTags = regularTags.sort((a, b) => {
-                              const aClean = a.startsWith('#') ? a.slice(1) : a;
-                              const bClean = b.startsWith('#') ? b.slice(1) : b;
-                              const aCardinality = tagCardinality[aClean.toLowerCase()] || 0;
-                              const bCardinality = tagCardinality[bClean.toLowerCase()] || 0;
-                              return bCardinality - aCardinality;
-                            });
-                            
-                            return (
-                              <>
-                                {domainTag && (
-                                  <span className="link-tag domain-tag">{domainTag}</span>
-                                )}
-                                {sortedTags.map((tag, idx) => {
-                                  const cleanTag = tag.startsWith('#') ? tag.slice(1) : tag;
-                                  const tagColor = getTagColor(cleanTag, tagCardinality);
-                                  return (
-                                    <span 
-                                      key={idx} 
-                                      className="link-tag"
-                                      style={{ color: tagColor }}
-                                    >
-                                      {tag.startsWith('#') ? tag : `#${tag}`}
-                                    </span>
-                                  );
-                                })}
-                              </>
-                            );
-                          })()}
-                        </div>
-                        <button 
-                          className="link-delete"
-                          onClick={(e) => handleDelete(link.id, e)}
-                        >
-                          ×
-                        </button>
-                      </>
-                    )}
+                    <img 
+                      src={getFaviconUrl(link.url)} 
+                      alt="" 
+                      className="link-favicon"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                    <a 
+                      href={link.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="link-url"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {link.title}
+                    </a>
+                    <div className="link-item-tags">
+                      {(() => {
+                        const domainTag = getDomainTag(link.url);
+                        const regularTags = link.tags && link.tags.trim() 
+                          ? link.tags.split(',').map(t => t.trim()).filter(t => t)
+                          : [];
+                        
+                        if (!domainTag && regularTags.length === 0) {
+                          return <span className="link-tag no-tag">#noTag</span>;
+                        }
+                        
+                        // Sort regular tags by cardinality (highest to lowest)
+                        const sortedTags = regularTags.sort((a, b) => {
+                          const aClean = a.startsWith('#') ? a.slice(1) : a;
+                          const bClean = b.startsWith('#') ? b.slice(1) : b;
+                          const aCardinality = tagCardinality[aClean.toLowerCase()] || 0;
+                          const bCardinality = tagCardinality[bClean.toLowerCase()] || 0;
+                          return bCardinality - aCardinality;
+                        });
+                        
+                        return (
+                          <>
+                            {domainTag && (
+                              <span className="link-tag domain-tag">{domainTag}</span>
+                            )}
+                            {sortedTags.map((tag, idx) => {
+                              const cleanTag = tag.startsWith('#') ? tag.slice(1) : tag;
+                              const tagColor = getTagColor(cleanTag, tagCardinality);
+                              return (
+                                <span 
+                                  key={idx} 
+                                  className="link-tag"
+                                  style={{ color: tagColor }}
+                                >
+                                  {tag.startsWith('#') ? tag : `#${tag}`}
+                                </span>
+                              );
+                            })}
+                          </>
+                        );
+                      })()}
+                    </div>
+                    <button 
+                      className="link-delete"
+                      onClick={(e) => handleDelete(link.id, e)}
+                    >
+                      ×
+                    </button>
                   </div>
                 );
               });
@@ -1290,6 +1129,86 @@ function App() {
           )}
         </div>
       </main>
+      
+      {/* Modal for adding new links */}
+      {showModal && (
+        <div className="modal-overlay" onClick={handleModalCancel}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-body">
+              <input
+                ref={modalTitleRef}
+                type="text"
+                className="modal-input"
+                value={`${modalTitle}${modalTags ? ' ' + modalTags : ''}`}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Parse title and tags from combined input
+                  const words = value.trim().split(/\s+/);
+                  const titleParts = [];
+                  const tagParts = [];
+                  
+                  words.forEach(word => {
+                    if (word.startsWith('#')) {
+                      tagParts.push(word);
+                    } else {
+                      titleParts.push(word);
+                    }
+                  });
+                  
+                  setModalTitle(titleParts.join(' '));
+                  setModalTags(tagParts.join(' '));
+                  updateAutocomplete(value, e.target, 'modal');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && modalUrl.trim() && modalTitle.trim()) {
+                    e.preventDefault();
+                    handleModalSave();
+                  } else if (e.key === 'Escape') {
+                    handleModalCancel();
+                  } else if (showAutocomplete && autocompleteSuggestions.length > 0) {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setAutocompleteIndex(prev => 
+                        prev < autocompleteSuggestions.length - 1 ? prev + 1 : prev
+                      );
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setAutocompleteIndex(prev => prev > 0 ? prev - 1 : -1);
+                    } else if (e.key === 'Enter' || e.key === 'Tab') {
+                      e.preventDefault();
+                      const selectedIndex = autocompleteIndex >= 0 ? autocompleteIndex : 0;
+                      const suggestion = autocompleteSuggestions[selectedIndex];
+                      const currentValue = `${modalTitle}${modalTags ? ' ' + modalTags : ''}`;
+                      insertAutocompleteSuggestion(suggestion, currentValue, modalTitleRef.current, 'modal');
+                    }
+                  }
+                }}
+                placeholder={fetchingTitle && !editingLinkId ? "fetching title..." : "title here #tag1 #tag2"}
+                autoFocus
+              />
+              {showAutocomplete && autocompleteSuggestions.length > 0 && autocompleteInputType === 'modal' && (
+                <div className="autocomplete-dropdown">
+                  {autocompleteSuggestions.map((suggestion, index) => (
+                    <div
+                      key={suggestion}
+                      className={`autocomplete-item ${index === autocompleteIndex ? 'selected' : ''}`}
+                      onClick={() => {
+                        const currentValue = `${modalTitle}${modalTags ? ' ' + modalTags : ''}`;
+                        insertAutocompleteSuggestion(suggestion, currentValue, modalTitleRef.current, 'modal');
+                      }}
+                      onMouseEnter={() => setAutocompleteIndex(index)}
+                    >
+                      #{suggestion}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="modal-url-hint">{getDomainFromUrl(modalUrl)}</div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="bottom-controls">
         <button className="tag-case-toggle" onClick={toggleTagCaseMode} title={`Switch to ${tagCaseMode === 'camelCase' ? 'snake_case' : 'camelCase'}`}>
           {tagCaseMode}

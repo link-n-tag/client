@@ -191,6 +191,32 @@ textarea {
   margin-top: 20px;
 }
 
+.paste-area-container {
+  margin-bottom: 20px;
+}
+
+.paste-area {
+  width: 100%;
+  padding: 12px;
+  font-size: 1rem;
+  border: 2px dashed var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  transition: border-color 0.3s ease;
+  font-family: inherit;
+}
+
+.paste-area::placeholder {
+  color: var(--text-tertiary);
+}
+
+.paste-area:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  background: var(--bg-secondary);
+}
+
 .link-input-container {
   margin-bottom: 20px;
   position: relative;
@@ -492,4 +518,61 @@ textarea {
 .autocomplete-item.selected {
   background: var(--bg-tertiary);
   color: var(--accent-color);
+}
+
+/* Modal Styles - Minimalist */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 600px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+.modal-body {
+  padding: 20px;
+  position: relative;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 12px 0;
+  font-size: 1.1rem;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  transition: border-color 0.2s ease;
+}
+
+.modal-input:focus {
+  outline: none;
+  border-bottom-color: var(--accent-color);
+}
+
+.modal-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.modal-url-hint {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  padding-left: 2px;
 }
