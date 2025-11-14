@@ -1,38 +1,442 @@
+* {
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+:root {
+  --bg-primary: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  --bg-secondary: #2a2a2a;
+  --bg-tertiary: #1f1f1f;
+  --bg-link-even: #2a2a2a;
+  --bg-link-odd: #272727;
+  --bg-link-hover: #333333;
+  --text-primary: #e0e0e0;
+  --text-secondary: #888;
+  --text-tertiary: #666;
+  --border-color: #3a3a3a;
+  --accent-color: #7aa3a3;
+  --accent-hover: #9bc4c4;
+  --domain-color: #9bc4c4;
+  --domain-active-bg: rgba(155, 196, 196, 0.15);
+  --drag-over-bg: rgba(90, 122, 90, 0.15);
+}
+
+:root.light-mode {
+  --bg-primary: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f8f8f8;
+  --bg-link-even: #ffffff;
+  --bg-link-odd: #fafafa;
+  --bg-link-hover: #f0f0f0;
+  --text-primary: #333;
+  --text-secondary: #666;
+  --text-tertiary: #999;
+  --border-color: #ddd;
+  --accent-color: #4a7a5a;
+  --accent-hover: #5a8a6a;
+  --domain-color: #5a8a8a;
+  --domain-active-bg: rgba(90, 138, 138, 0.1);
+  --drag-over-bg: rgba(74, 122, 90, 0.1);
+}
+
 .App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
   min-height: 100vh;
+  background: var(--bg-primary);
+  padding: 40px 20px;
+  position: relative;
+  padding-bottom: 60px;
+}
+
+.app-header {
+  text-align: center;
+  color: var(--text-primary);
+  margin-bottom: 40px;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.app-main {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.app-footer {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+}
+
+.app-title {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  font-weight: 300;
+  letter-spacing: 0.5px;
+}
+
+.bottom-controls {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  z-index: 100;
+}
+
+.bottom-controls-separator {
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+}
+
+.tag-case-toggle,
+.theme-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-family: inherit;
+}
+
+.tag-case-toggle:hover,
+.theme-toggle:hover {
+  color: var(--text-primary);
+}
+
+.tags-section {
+  margin-bottom: 30px;
+  padding: 0;
+}
+
+.tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  justify-content: center;
+}
+
+.tag-filter {
+  padding: 4px 12px;
+  font-size: 0.85rem;
+  font-weight: 400;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  text-decoration: none;
+}
+
+.tag-filter:hover {
+  color: var(--text-primary);
+}
+
+.tag-filter.active {
+  color: var(--accent-color);
+  font-weight: 500;
+  text-decoration: underline;
+}
+
+.tag-filter.clear {
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+  text-decoration: underline;
+}
+
+.tag-filter.clear:hover {
+  color: var(--text-secondary);
+}
+
+.tag-filter.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.tag-filter {
+  cursor: grab;
+}
+
+.tag-filter:active {
+  cursor: grabbing;
+}
+
+.tag-filter.no-tag-reserved {
+  opacity: 0.8;
+  font-style: italic;
+  cursor: default;
+}
+
+.tag-filter.no-tag-reserved:hover {
+  opacity: 0.9;
+}
+
+.links-container {
+  margin-top: 20px;
+}
+
+.link-input-container {
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.link-edit-container {
+  position: relative;
+  flex: 1;
+}
+
+.link-input {
+  width: 100%;
+  padding: 12px;
+  font-size: 1rem;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  transition: border-color 0.3s ease;
+  font-family: inherit;
+}
+
+.link-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.link-input:focus {
+  outline: none;
+  border-bottom-color: var(--accent-color);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.empty-state p {
+  font-size: 0.9rem;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.links-list {
   display: flex;
   flex-direction: column;
+  gap: 1px;
+}
+
+.link-item {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: background 0.2s ease;
+  border-left: 2px solid transparent;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.App-link {
-  color: #61dafb;
+.link-item.even {
+  background: var(--bg-link-even);
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
+.link-item.odd {
+  background: var(--bg-link-odd);
+}
+
+.link-item.even:hover {
+  background: var(--bg-link-hover);
+  border-left-color: var(--accent-color);
+}
+
+.link-item.odd:hover {
+  background: var(--bg-link-hover);
+  border-left-color: var(--accent-color);
+}
+
+.link-item.drag-over {
+  background: var(--drag-over-bg);
+  border-left-color: var(--accent-color);
+  border-left-width: 3px;
+}
+
+.link-item.editing {
+  background: var(--bg-tertiary);
+  border-left-color: var(--accent-color);
+  padding: 8px 12px;
+}
+
+.link-edit-input {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 0.95rem;
+  border: 1px solid var(--accent-color);
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.link-edit-input:focus {
+  outline: none;
+  border-color: var(--accent-hover);
+}
+
+.link-favicon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.link-url {
+  flex: 1;
+  color: var(--accent-color);
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: color 0.2s ease;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+}
+
+.link-url:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.link-item-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
+.link-tag {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+}
+
+.link-tag.no-tag {
+  color: var(--text-tertiary);
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.link-tag.domain-tag {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+
+.tag-filter.domain-tag {
+  color: var(--text-secondary);
+}
+
+.tag-filter.domain-tag:hover {
+  color: var(--text-primary);
+}
+
+.link-delete {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.2s ease;
+  opacity: 0;
+}
+
+.link-item:hover .link-delete {
+  opacity: 1;
+}
+
+.link-delete:hover {
+  color: #ff6b6b;
+}
+
+@media (max-width: 720px) {
+  .App {
+    padding: 20px 15px;
   }
-  to {
-    transform: rotate(360deg);
+
+  .app-header h1 {
+    font-size: 1.5rem;
   }
+
+
+  .link-item {
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .link-item-tags {
+    flex-shrink: 0;
+    min-width: 0;
+  }
+  
+  .link-url {
+    min-width: 0;
+    max-width: 100%;
+  }
+  
+  .link-favicon {
+    flex-shrink: 0;
+  }
+
+  .link-delete {
+    opacity: 1;
+  }
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-top: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.autocomplete-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  transition: background 0.15s ease;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.selected {
+  background: var(--bg-tertiary);
+  color: var(--accent-color);
 }
