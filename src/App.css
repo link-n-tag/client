@@ -311,6 +311,7 @@ textarea {
 .link-item {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
   background: var(--bg-secondary);
@@ -374,6 +375,11 @@ textarea {
   height: 16px;
   flex-shrink: 0;
   object-fit: contain;
+  cursor: pointer;
+}
+
+.link-favicon:hover {
+  opacity: 0.8;
 }
 
 .link-url {
@@ -399,6 +405,20 @@ textarea {
   gap: 6px;
   flex-wrap: wrap;
   flex: 0 0 auto;
+  align-items: center;
+}
+
+.link-item-tags-right {
+  margin-left: auto;
+}
+
+.link-tag.domain-tag {
+  margin-left: 4px;
+  cursor: pointer;
+}
+
+.link-tag.domain-tag:hover {
+  opacity: 0.8;
 }
 
 .link-tag {

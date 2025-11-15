@@ -8,7 +8,6 @@ function App() {
   const [editingLinkId, setEditingLinkId] = useState(null); // Track which link is being edited
   const [showModal, setShowModal] = useState(false);
   const [modalUrl, setModalUrl] = useState('');
-  const [modalTitle, setModalTitle] = useState('');
   const [modalTags, setModalTags] = useState('');
   const [modalInputValue, setModalInputValue] = useState('');
   const [fetchingTitle, setFetchingTitle] = useState(false);
@@ -139,7 +138,7 @@ function App() {
   // Handle paste event to open modal
   const handlePaste = useCallback(async (e) => {
     const pastedText = (e.clipboardData || window.clipboardData).getData('text');
-    const urlPattern = /^https?:\/\/.+/i;
+    const urlPattern = /^(https?|file):\/\/.+/i;
     
     if (urlPattern.test(pastedText.trim())) {
       e.preventDefault();
@@ -157,9 +156,8 @@ function App() {
           : '';
         setEditingLinkId(existingLink.id);
         setModalUrl(existingLink.url);
-        setModalTitle(existingLink.title);
         setModalTags(tagsDisplay);
-        setModalInputValue(`${existingLink.title}${tagsDisplay ? ' ' + tagsDisplay : ''}`);
+        setModalInputValue(tagsDisplay);
         setShowModal(true);
         return;
       }
@@ -167,22 +165,24 @@ function App() {
       // Open modal with URL (new link)
       setEditingLinkId(null); // Ensure we're creating, not editing
       setModalUrl(url);
-      setModalTitle('');
       setModalTags('');
       setModalInputValue('');
       setShowModal(true);
-      setFetchingTitle(true);
       
-      // Fetch title automatically
-      fetchPageTitle(url).then(title => {
+      // Only fetch title for http/https URLs, not for file:// URLs
+      if (url.trim().toLowerCase().startsWith('file://')) {
         setFetchingTitle(false);
-        if (title) {
-          setModalTitle(title);
-          setModalInputValue(title);
-        }
-      }).catch(() => {
-        setFetchingTitle(false);
-      });
+        setModalInputValue('');
+      } else {
+        setFetchingTitle(true);
+        // Fetch title automatically (though we don't use it anymore)
+        fetchPageTitle(url).then(() => {
+          setFetchingTitle(false);
+          setModalInputValue('');
+        }).catch(() => {
+          setFetchingTitle(false);
+        });
+      }
     }
   }, [links, fetchPageTitle]);
 
@@ -228,7 +228,7 @@ function App() {
 
   // Handle modal save
   const handleModalSave = () => {
-    if (!modalUrl.trim() || !modalTitle.trim()) {
+    if (!modalUrl.trim()) {
       return;
     }
     
@@ -248,7 +248,7 @@ function App() {
         link.id === editingLinkId
           ? {
               ...link,
-              title: modalTitle.trim(),
+              title: '', // No longer used, but keep for backward compatibility
               url: modalUrl.trim(),
               tags: normalizedTags || ''
             }
@@ -260,7 +260,7 @@ function App() {
       // Create new link
       const newLink = {
         id: Date.now(),
-        title: modalTitle.trim(),
+        title: '', // No longer used, but keep for backward compatibility
         url: modalUrl.trim(),
         tags: normalizedTags || '',
         created_at: new Date().toISOString()
@@ -270,7 +270,6 @@ function App() {
     
     setShowModal(false);
     setModalUrl('');
-    setModalTitle('');
     setModalTags('');
     setModalInputValue('');
   };
@@ -279,7 +278,6 @@ function App() {
   const handleModalCancel = () => {
     setShowModal(false);
     setModalUrl('');
-    setModalTitle('');
     setModalTags('');
     setModalInputValue('');
     setFetchingTitle(false);
@@ -448,20 +446,16 @@ function App() {
       // Update the raw input value first
       setModalInputValue(newText);
       
-      // Parse the combined input to separate title and tags
+      // Parse tags only (no title anymore)
       const words = newText.match(/\S+/g) || [];
-      const titleParts = [];
       const tagParts = [];
       
       words.forEach(word => {
         if (word.startsWith('#')) {
           tagParts.push(word);
-        } else {
-          titleParts.push(word);
         }
       });
       
-      setModalTitle(titleParts.join(' '));
       setModalTags(tagParts.join(' '));
     } else if (inputType === 'modal-tags') {
       setModalTags(newText);
@@ -556,12 +550,10 @@ function App() {
     const tagsDisplay = link.tags 
       ? link.tags.split(',').map(t => `#${t.trim()}`).join(' ')
       : '';
-    const inputValue = `${link.title}${tagsDisplay ? ' ' + tagsDisplay : ''}`;
     setEditingLinkId(link.id);
     setModalUrl(link.url);
-    setModalTitle(link.title);
     setModalTags(tagsDisplay);
-    setModalInputValue(inputValue);
+    setModalInputValue(tagsDisplay);
     setShowModal(true);
   };
 
@@ -622,8 +614,19 @@ function App() {
     setDraggedTag(null);
   };
 
-  // Get domain tag from a URL
+  // Get favicon URL
   const getFaviconUrl = (url) => {
+    // Return default file icon for file:// URLs
+    if (url && url.toLowerCase().startsWith('file://')) {
+      // Return a simple file icon as SVG data URI
+      const fileIconSvg = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 2H12V14H4V2Z" stroke="#7aa3a3" stroke-width="1.5" fill="none"/>
+        <path d="M5 5H11" stroke="#7aa3a3" stroke-width="1.5"/>
+        <path d="M5 7H11" stroke="#7aa3a3" stroke-width="1.5"/>
+        <path d="M5 9H9" stroke="#7aa3a3" stroke-width="1.5"/>
+      </svg>`;
+      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(fileIconSvg)}`;
+    }
     try {
       const urlObj = new URL(url);
       const domain = urlObj.hostname.replace('www.', '');
@@ -635,6 +638,10 @@ function App() {
 
   const getDomainTag = (url) => {
     if (!url) return null;
+    // Return @file for file:// URLs
+    if (url.toLowerCase().startsWith('file://')) {
+      return '@file';
+    }
     const domain = getDomainFromUrl(url);
     return domain ? `@${domain}` : null;
   };
@@ -883,10 +890,9 @@ function App() {
       }
     }
     
-    // Filter by search term (searches in title and tags)
+    // Filter by search term (searches in URL and tags)
     if (searchTerm.trim()) {
       const searchLower = searchTerm.toLowerCase().trim();
-      const titleMatch = link.title.toLowerCase().includes(searchLower);
       
       // Check tags
       const linkTags = link.tags ? link.tags.split(',').map(t => t.trim().toLowerCase()) : [];
@@ -899,7 +905,7 @@ function App() {
       // Check URL
       const urlMatch = link.url.toLowerCase().includes(searchLower);
       
-      if (!titleMatch && !tagMatch && !urlMatch) {
+      if (!tagMatch && !urlMatch) {
         return false;
       }
     }
@@ -999,7 +1005,7 @@ function App() {
               onKeyDown={(e) => {
                 // If Enter is pressed and it's a URL, open modal
                 if (e.key === 'Enter') {
-                  const urlPattern = /^https?:\/\/.+/i;
+                  const urlPattern = /^(https?|file):\/\/.+/i;
                   if (urlPattern.test(searchTerm.trim())) {
                     e.preventDefault();
                     const url = searchTerm.trim();
@@ -1012,27 +1018,32 @@ function App() {
                         : '';
                       setEditingLinkId(existingLink.id);
                       setModalUrl(existingLink.url);
-                      setModalTitle(existingLink.title);
                       setModalTags(tagsDisplay);
+                      setModalInputValue(tagsDisplay);
                       setShowModal(true);
                       setSearchTerm('');
                     } else {
                       setEditingLinkId(null);
                       setModalUrl(url);
-                      setModalTitle('');
                       setModalTags('');
+                      setModalInputValue('');
                       setShowModal(true);
-                      setFetchingTitle(true);
                       setSearchTerm('');
                       
-                      fetchPageTitle(url).then(title => {
+                      // Only fetch title for http/https URLs, not for file:// URLs
+                      if (url.trim().toLowerCase().startsWith('file://')) {
                         setFetchingTitle(false);
-                        if (title) {
-                          setModalTitle(title);
-                        }
-                      }).catch(() => {
-                        setFetchingTitle(false);
-                      });
+                        setModalInputValue('');
+                      } else {
+                        setFetchingTitle(true);
+                        // Fetch title automatically (though we don't use it anymore)
+                        fetchPageTitle(url).then(() => {
+                          setFetchingTitle(false);
+                          setModalInputValue('');
+                        }).catch(() => {
+                          setFetchingTitle(false);
+                        });
+                      }
                     }
                   }
                 }
@@ -1071,29 +1082,74 @@ function App() {
                       src={getFaviconUrl(link.url)} 
                       alt="" 
                       className="link-favicon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Open link when favicon is clicked
+                        if (link.url.toLowerCase().startsWith('file://')) {
+                          // Handle file:// URLs specially
+                          if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(link.url).then(() => {
+                              try {
+                                window.location.href = link.url;
+                                setTimeout(() => {
+                                  alert(`File path copied to clipboard.\n\nPath: ${link.url}\n\nNote: Due to browser security restrictions, file:// links cannot be opened directly from web pages. The path has been copied - you can paste it into your file manager.`);
+                                }, 100);
+                              } catch (err) {
+                                alert(`File path copied to clipboard.\n\nPath: ${link.url}\n\nNote: Due to browser security restrictions, file:// links cannot be opened directly from web pages. The path has been copied - you can paste it into your file manager.`);
+                              }
+                            }).catch(() => {
+                              alert(`Cannot open file:// link due to browser security.\n\nPath: ${link.url}\n\nPlease copy this path and open it manually in your file manager.`);
+                            });
+                          } else {
+                            alert(`Cannot open file:// link due to browser security.\n\nPath: ${link.url}\n\nPlease copy this path and open it manually in your file manager.`);
+                          }
+                        } else {
+                          window.open(link.url, '_blank', 'noopener,noreferrer');
+                        }
+                      }}
                       onError={(e) => {
                         e.target.style.display = 'none';
                       }}
                     />
-                    <a 
-                      href={link.url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="link-url"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {link.title}
-                    </a>
-                    <div className="link-item-tags">
+                    {(() => {
+                      const domainTag = getDomainTag(link.url);
+                      return domainTag ? (
+                        <span 
+                          className="link-tag domain-tag"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Open link when domain tag is clicked
+                            if (link.url.toLowerCase().startsWith('file://')) {
+                              if (navigator.clipboard && navigator.clipboard.writeText) {
+                                navigator.clipboard.writeText(link.url).then(() => {
+                                  try {
+                                    window.location.href = link.url;
+                                    setTimeout(() => {
+                                      alert(`File path copied to clipboard.\n\nPath: ${link.url}\n\nNote: Due to browser security restrictions, file:// links cannot be opened directly from web pages. The path has been copied - you can paste it into your file manager.`);
+                                    }, 100);
+                                  } catch (err) {
+                                    alert(`File path copied to clipboard.\n\nPath: ${link.url}\n\nNote: Due to browser security restrictions, file:// links cannot be opened directly from web pages. The path has been copied - you can paste it into your file manager.`);
+                                  }
+                                }).catch(() => {
+                                  alert(`Cannot open file:// link due to browser security.\n\nPath: ${link.url}\n\nPlease copy this path and open it manually in your file manager.`);
+                                });
+                              } else {
+                                alert(`Cannot open file:// link due to browser security.\n\nPath: ${link.url}\n\nPlease copy this path and open it manually in your file manager.`);
+                              }
+                            } else {
+                              window.open(link.url, '_blank', 'noopener,noreferrer');
+                            }
+                          }}
+                        >
+                          {domainTag}
+                        </span>
+                      ) : null;
+                    })()}
+                    <div className="link-item-tags link-item-tags-right">
                       {(() => {
-                        const domainTag = getDomainTag(link.url);
                         const regularTags = link.tags && link.tags.trim() 
                           ? link.tags.split(',').map(t => t.trim()).filter(t => t)
                           : [];
-                        
-                        if (!domainTag && regularTags.length === 0) {
-                          return <span className="link-tag no-tag">#noTag</span>;
-                        }
                         
                         // Sort regular tags by cardinality (highest to lowest)
                         const sortedTags = regularTags.sort((a, b) => {
@@ -1104,26 +1160,23 @@ function App() {
                           return bCardinality - aCardinality;
                         });
                         
-                        return (
-                          <>
-                            {domainTag && (
-                              <span className="link-tag domain-tag">{domainTag}</span>
-                            )}
-                            {sortedTags.map((tag, idx) => {
-                              const cleanTag = tag.startsWith('#') ? tag.slice(1) : tag;
-                              const tagColor = getTagColor(cleanTag, tagCardinality);
-                              return (
-                                <span 
-                                  key={idx} 
-                                  className="link-tag"
-                                  style={{ color: tagColor }}
-                                >
-                                  {tag.startsWith('#') ? tag : `#${tag}`}
-                                </span>
-                              );
-                            })}
-                          </>
-                        );
+                        if (sortedTags.length === 0) {
+                          return <span className="link-tag no-tag">#noTag</span>;
+                        }
+                        
+                        return sortedTags.map((tag, idx) => {
+                          const cleanTag = tag.startsWith('#') ? tag.slice(1) : tag;
+                          const tagColor = getTagColor(cleanTag, tagCardinality);
+                          return (
+                            <span 
+                              key={idx} 
+                              className="link-tag"
+                              style={{ color: tagColor }}
+                            >
+                              {tag.startsWith('#') ? tag : `#${tag}`}
+                            </span>
+                          );
+                        });
                       })()}
                     </div>
                     <button 
@@ -1156,28 +1209,24 @@ function App() {
                   // Store the raw input value to preserve spaces
                   setModalInputValue(value);
                   
-                  // Parse title and tags for state (used when saving)
+                  // Parse tags only (no title anymore)
                   const words = value.match(/\S+/g) || [];
-                  const titleParts = [];
                   const tagParts = [];
                   
                   words.forEach(word => {
                     if (word.startsWith('#')) {
                       tagParts.push(word);
-                    } else {
-                      titleParts.push(word);
                     }
                   });
                   
                   // Update parsed state for saving
-                  setModalTitle(titleParts.join(' '));
                   setModalTags(tagParts.join(' '));
                   
                   // Update autocomplete with raw value
                   updateAutocomplete(value, e.target, 'modal');
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && modalUrl.trim() && modalTitle.trim()) {
+                  if (e.key === 'Enter' && modalUrl.trim()) {
                     e.preventDefault();
                     handleModalSave();
                   } else if (e.key === 'Escape') {
@@ -1199,7 +1248,7 @@ function App() {
                     }
                   }
                 }}
-                placeholder={fetchingTitle && !editingLinkId ? "fetching title..." : "title here #tag1 #tag2"}
+                placeholder={fetchingTitle && !editingLinkId ? "fetching title..." : "#tag1 #tag2"}
                 autoFocus
               />
               {showAutocomplete && autocompleteSuggestions.length > 0 && autocompleteInputType === 'modal' && (
