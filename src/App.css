@@ -18,18 +18,29 @@ textarea {
   --bg-primary: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
   --bg-secondary: #2a2a2a;
   --bg-tertiary: #1f1f1f;
-  --bg-link-even: #2a2a2a;
-  --bg-link-odd: #272727;
-  --bg-link-hover: #333333;
+  --bg-link-even: #323232;
+  --bg-link-odd: #2f2f2f;
+  --bg-link-hover: #3a3a3a;
   --text-primary: #e0e0e0;
   --text-secondary: #888;
   --text-tertiary: #666;
+  --tag-text-color: #d0d0d0;
   --border-color: #3a3a3a;
   --accent-color: #7aa3a3;
   --accent-hover: #9bc4c4;
   --domain-color: #9bc4c4;
   --domain-active-bg: rgba(155, 196, 196, 0.15);
   --drag-over-bg: rgba(90, 122, 90, 0.15);
+}
+
+:root,
+:root.light-mode {
+  transition: none !important;
+}
+
+:root *,
+:root.light-mode * {
+  transition: none !important;
 }
 
 :root.light-mode {
@@ -42,6 +53,7 @@ textarea {
   --text-primary: #333;
   --text-secondary: #666;
   --text-tertiary: #999;
+  --tag-text-color: #ffffff;
   --border-color: #ddd;
   --accent-color: #4a7a5a;
   --accent-hover: #5a8a6a;
@@ -128,30 +140,32 @@ textarea {
 .tags-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 0;
+  gap: 6px;
   justify-content: center;
 }
 
 .tag-filter {
   padding: 4px 12px;
   font-size: 0.85rem;
-  font-weight: 400;
-  background: transparent;
-  color: var(--text-secondary);
-  border: none;
+  font-weight: 500;
+  background: var(--bg-tertiary); /* fallback, will be overridden by dynamic color */
+  color: var(--tag-text-color);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
   text-decoration: none;
 }
 
 .tag-filter:hover {
-  color: var(--text-primary);
+  color: var(--tag-text-color);
 }
 
 .tag-filter.active {
-  color: var(--accent-color);
-  font-weight: 500;
+  color: var(--tag-text-color);
+  font-weight: 600;
   text-decoration: underline;
+  border-color: var(--accent-color);
 }
 
 .tag-filter.clear {
@@ -423,29 +437,35 @@ textarea {
 
 .link-tag {
   font-size: 0.75rem;
-  color: var(--text-secondary);
+  color: var(--tag-text-color);
+  font-weight: 500;
   padding: 2px 6px;
-  background: var(--bg-tertiary);
+  background: var(--bg-tertiary); /* fallback, will be overridden by dynamic color */
+  border: 1px solid var(--border-color);
   border-radius: 3px;
 }
 
 .link-tag.no-tag {
-  color: var(--text-tertiary);
+  color: var(--text-primary);
   font-style: italic;
-  opacity: 0.7;
+  opacity: 0.9;
 }
 
 .link-tag.domain-tag {
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
+  color: var(--tag-text-color);
+  font-weight: 500;
+  /* background will be set dynamically based on cardinality */
+  border: 1px solid var(--border-color);
 }
 
 .tag-filter.domain-tag {
-  color: var(--text-secondary);
+  color: var(--tag-text-color);
+  /* background will be set dynamically based on cardinality */
+  border: 1px solid var(--border-color);
 }
 
 .tag-filter.domain-tag:hover {
-  color: var(--text-primary);
+  color: var(--tag-text-color);
 }
 
 .link-delete {

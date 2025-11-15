@@ -10,7 +10,6 @@ function App() {
   const [modalUrl, setModalUrl] = useState('');
   const [modalTags, setModalTags] = useState('');
   const [modalInputValue, setModalInputValue] = useState('');
-  const [fetchingTitle, setFetchingTitle] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [draggedTag, setDraggedTag] = useState(null);
@@ -21,119 +20,11 @@ function App() {
   const [autocompleteIndex, setAutocompleteIndex] = useState(-1);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [autocompleteInputType, setAutocompleteInputType] = useState(null); // 'modal'
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameOldTag, setRenameOldTag] = useState('');
+  const [renameNewTag, setRenameNewTag] = useState('');
+  const [renameAffectedCount, setRenameAffectedCount] = useState(0);
   const modalTitleRef = useRef(null);
-
-  // Fetch page title from URL
-  const fetchPageTitle = useCallback(async (url) => {
-    try {
-      // Normalize URL to ensure we're fetching the exact page
-      let targetUrl = url.trim();
-      if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
-        targetUrl = 'https://' + targetUrl;
-      }
-      
-      // Try multiple CORS proxy services as fallbacks
-      const proxyServices = [
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-        `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
-      ];
-      
-      let html = null;
-      let lastError = null;
-      
-      // Try each proxy service until one works
-      for (const proxyUrl of proxyServices) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-          
-          const response = await fetch(proxyUrl, {
-            method: 'GET',
-            headers: {
-              'Accept': 'text/html',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-            signal: controller.signal,
-          });
-          
-          clearTimeout(timeoutId);
-          
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          
-          html = await response.text();
-          
-          // Validate that we got actual HTML content (not an error page)
-          if (html && html.length > 100 && html.includes('<title')) {
-            break; // Success, exit loop
-          }
-        } catch (error) {
-          lastError = error;
-          // Continue to next proxy service
-          continue;
-        }
-      }
-      
-      if (!html) {
-        throw lastError || new Error('All proxy services failed');
-      }
-      
-      // Try multiple methods to extract title (in order of preference)
-      let title = null;
-      
-      // 1. Try Open Graph title (most reliable for specific pages)
-      const ogTitleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i);
-      if (ogTitleMatch && ogTitleMatch[1]) {
-        title = ogTitleMatch[1];
-      }
-      
-      // 2. Try Twitter card title
-      if (!title) {
-        const twitterTitleMatch = html.match(/<meta\s+name=["']twitter:title["']\s+content=["']([^"']+)["']/i);
-        if (twitterTitleMatch && twitterTitleMatch[1]) {
-          title = twitterTitleMatch[1];
-        }
-      }
-      
-      // 3. Try standard HTML title tag
-      if (!title) {
-        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-        if (titleMatch && titleMatch[1]) {
-          title = titleMatch[1];
-        }
-      }
-      
-      if (title) {
-        // Clean up the title: decode HTML entities, trim whitespace
-        title = title
-          .replace(/&nbsp;/g, ' ')
-          .replace(/&amp;/g, '&')
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/&apos;/g, "'")
-          .replace(/&#x27;/g, "'")
-          .replace(/&#x2F;/g, '/')
-          .replace(/\s+/g, ' ')
-          .trim();
-        
-        // Limit title length
-        if (title.length > 100) {
-          title = title.substring(0, 100) + '...';
-        }
-        
-        return title;
-      }
-    } catch (error) {
-      // CORS or other errors - silently fail and return null
-      // The user can still manually enter the title
-      console.debug('Could not fetch page title:', error.message);
-    }
-    return null;
-  }, []);
 
   // Handle paste event to open modal
   const handlePaste = useCallback(async (e) => {
@@ -168,23 +59,8 @@ function App() {
       setModalTags('');
       setModalInputValue('');
       setShowModal(true);
-      
-      // Only fetch title for http/https URLs, not for file:// URLs
-      if (url.trim().toLowerCase().startsWith('file://')) {
-        setFetchingTitle(false);
-        setModalInputValue('');
-      } else {
-        setFetchingTitle(true);
-        // Fetch title automatically (though we don't use it anymore)
-        fetchPageTitle(url).then(() => {
-          setFetchingTitle(false);
-          setModalInputValue('');
-        }).catch(() => {
-          setFetchingTitle(false);
-        });
-      }
     }
-  }, [links, fetchPageTitle]);
+  }, [links]);
 
   // Read query parameters on mount and handle browser navigation
   useEffect(() => {
@@ -280,7 +156,6 @@ function App() {
     setModalUrl('');
     setModalTags('');
     setModalInputValue('');
-    setFetchingTitle(false);
     setEditingLinkId(null);
   };
 
@@ -537,7 +412,75 @@ function App() {
 
 
 
+  // Detect and handle tag rename pattern: > rename|#oldName|#newName
+  const detectTagRename = (text) => {
+    const pattern = /^>\s*rename\s*\|\s*#([^\s#|]+)\s*\|\s*#([^\s#|]+)$/i;
+    const match = text.trim().match(pattern);
+    if (match) {
+      const oldTag = match[1].trim();
+      const newTag = match[2].trim();
+      
+      // Normalize tags
+      const normalizedOldTag = normalizeTag(oldTag);
+      const normalizedNewTag = normalizeTag(newTag);
+      
+      // Count affected links
+      let affectedCount = 0;
+      links.forEach(link => {
+        if (link.tags) {
+          const tags = link.tags.split(',').map(t => t.trim());
+          if (tags.some(t => normalizeTag(t).toLowerCase() === normalizedOldTag.toLowerCase())) {
+            affectedCount++;
+          }
+        }
+      });
+      
+      if (affectedCount > 0) {
+        setRenameOldTag(normalizedOldTag);
+        setRenameNewTag(normalizedNewTag);
+        setRenameAffectedCount(affectedCount);
+        setShowRenameModal(true);
+        return true;
+      }
+    }
+    return false;
+  };
 
+  // Rename tag across all links
+  const handleRenameTag = () => {
+    const updatedLinks = links.map(link => {
+      if (link.tags) {
+        const tags = link.tags.split(',').map(t => t.trim()).filter(t => t);
+        const updatedTags = tags.map(tag => {
+          const normalizedTag = normalizeTag(tag);
+          if (normalizedTag.toLowerCase() === renameOldTag.toLowerCase()) {
+            return renameNewTag;
+          }
+          return tag;
+        });
+        return {
+          ...link,
+          tags: updatedTags.join(', ')
+        };
+      }
+      return link;
+    });
+    
+    saveLinks(updatedLinks);
+    setShowRenameModal(false);
+    setSearchTerm('');
+    setRenameOldTag('');
+    setRenameNewTag('');
+    setRenameAffectedCount(0);
+  };
+
+  const handleRenameCancel = () => {
+    setShowRenameModal(false);
+    setSearchTerm('');
+    setRenameOldTag('');
+    setRenameNewTag('');
+    setRenameAffectedCount(0);
+  };
 
   const handleDelete = (id, e) => {
     e.stopPropagation();
@@ -695,11 +638,21 @@ function App() {
     const maxCardinality = Math.max(...Object.values(tagCardinality), 1);
     const normalized = cardinality / maxCardinality;
     
-    // Interpolate between grey (#888) and blue (#7aa3a3)
-    // Grey: rgb(136, 136, 136)
-    // Blue: rgb(122, 163, 163)
-    const grey = { r: 136, g: 136, b: 136 };
-    const blue = { r: 122, g: 163, b: 163 };
+    // Use different color ranges based on theme
+    let grey, blue;
+    if (isDarkMode) {
+      // Dark mode: darker colors
+      // Grey: rgb(80, 80, 80)
+      // Blue: rgb(70, 100, 100)
+      grey = { r: 80, g: 80, b: 80 };
+      blue = { r: 70, g: 100, b: 100 };
+    } else {
+      // Light mode: darker colors for better contrast
+      // Grey: rgb(140, 140, 140)
+      // Blue: rgb(100, 140, 140)
+      grey = { r: 140, g: 140, b: 140 };
+      blue = { r: 100, g: 140, b: 140 };
+    }
     
     const r = Math.round(grey.r + (blue.r - grey.r) * normalized);
     const g = Math.round(grey.g + (blue.g - grey.g) * normalized);
@@ -856,6 +809,15 @@ function App() {
   };
 
   const filteredLinks = links.filter(link => {
+    // Skip filtering if search term starts with ">" (special command)
+    if (searchTerm.trim().startsWith('>')) {
+      // Still filter by selected tags if any
+      if (selectedTags.length === 0) {
+        return true; // Show all links if no tags selected
+      }
+      // Continue to tag filtering below
+    }
+    
     // Filter by selected tags
     if (selectedTags.length > 0) {
       const selectedTagsLower = selectedTags.map(t => t.toLowerCase());
@@ -890,8 +852,8 @@ function App() {
       }
     }
     
-    // Filter by search term (searches in URL and tags)
-    if (searchTerm.trim()) {
+    // Filter by search term (searches in URL and tags) - skip if it starts with ">"
+    if (searchTerm.trim() && !searchTerm.trim().startsWith('>')) {
       const searchLower = searchTerm.toLowerCase().trim();
       
       // Check tags
@@ -940,12 +902,12 @@ function App() {
                   const isDomainTag = tag.startsWith('@');
                   const displayTag = isDomainTag ? tag : (tag.startsWith('#') ? tag : `#${tag}`);
                   if (!isInAvailableTags) {
-                    const tagColor = !isNoTag && !isDomainTag ? getTagColor(tag, tagCardinality) : undefined;
+                    const tagColor = !isNoTag ? getTagColor(tag, tagCardinality) : undefined;
                     return (
                       <button
                         key={tag}
                         className={`tag-filter active ${isNoTag ? 'no-tag-reserved' : ''} ${isDomainTag ? 'domain-tag' : ''}`}
-                        style={tagColor ? { color: tagColor } : undefined}
+                        style={tagColor ? { backgroundColor: tagColor } : undefined}
                         onClick={() => handleTagClick(tag)}
                         draggable={!isNoTag && !isDomainTag}
                         onDragStart={!isNoTag && !isDomainTag ? (e) => handleTagDragStart(e, tag) : undefined}
@@ -962,12 +924,12 @@ function App() {
                   const isNoTag = tag.toLowerCase() === 'notag';
                   const isDomainTag = tag.startsWith('@');
                   const displayTag = isDomainTag ? tag : (tag.startsWith('#') ? tag : `#${tag}`);
-                  const tagColor = !isNoTag && !isDomainTag ? getTagColor(tag, tagCardinality) : undefined;
+                  const tagColor = !isNoTag ? getTagColor(tag, tagCardinality) : undefined;
                   return (
                     <button
                       key={tag}
                       className={`tag-filter ${isSelected ? 'active' : ''} ${draggedTag === tag ? 'dragging' : ''} ${isNoTag ? 'no-tag-reserved' : ''} ${isDomainTag ? 'domain-tag' : ''}`}
-                      style={tagColor ? { color: tagColor } : undefined}
+                      style={tagColor ? { backgroundColor: tagColor } : undefined}
                       onClick={() => handleTagClick(tag)}
                       draggable={!isNoTag && !isDomainTag}
                       onDragStart={!isNoTag && !isDomainTag ? (e) => handleTagDragStart(e, tag) : undefined}
@@ -1003,8 +965,15 @@ function App() {
               }}
               onPaste={handlePaste}
               onKeyDown={(e) => {
-                // If Enter is pressed and it's a URL, open modal
+                // If Enter is pressed
                 if (e.key === 'Enter') {
+                  // Check for tag rename pattern first: > rename|#oldName|#newName
+                  if (detectTagRename(searchTerm)) {
+                    e.preventDefault();
+                    return;
+                  }
+                  
+                  // If it's a URL, open modal
                   const urlPattern = /^(https?|file):\/\/.+/i;
                   if (urlPattern.test(searchTerm.trim())) {
                     e.preventDefault();
@@ -1029,21 +998,6 @@ function App() {
                       setModalInputValue('');
                       setShowModal(true);
                       setSearchTerm('');
-                      
-                      // Only fetch title for http/https URLs, not for file:// URLs
-                      if (url.trim().toLowerCase().startsWith('file://')) {
-                        setFetchingTitle(false);
-                        setModalInputValue('');
-                      } else {
-                        setFetchingTitle(true);
-                        // Fetch title automatically (though we don't use it anymore)
-                        fetchPageTitle(url).then(() => {
-                          setFetchingTitle(false);
-                          setModalInputValue('');
-                        }).catch(() => {
-                          setFetchingTitle(false);
-                        });
-                      }
                     }
                   }
                 }
@@ -1073,7 +1027,33 @@ function App() {
                     key={link.id}
                     data-link-id={link.id}
                     className={`link-item ${dragOverLinkId === link.id ? 'drag-over' : ''} ${isEven ? 'even' : 'odd'}`}
-                    onClick={() => handleLinkClick(link)}
+                    onClick={(e) => {
+                      // Only open link if clicking on the box itself (not on tags/favicon/etc)
+                      // Tags, favicon, and domain tags already have stopPropagation
+                      if (e.target === e.currentTarget || !e.target.closest('.link-tag, .link-favicon, .link-delete')) {
+                        // Open link when clicking on the box
+                        if (link.url.toLowerCase().startsWith('file://')) {
+                          if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(link.url).then(() => {
+                              try {
+                                window.location.href = link.url;
+                                setTimeout(() => {
+                                  alert(`File path copied to clipboard.\n\nPath: ${link.url}\n\nNote: Due to browser security restrictions, file:// links cannot be opened directly from web pages. The path has been copied - you can paste it into your file manager.`);
+                                }, 100);
+                              } catch (err) {
+                                alert(`File path copied to clipboard.\n\nPath: ${link.url}\n\nNote: Due to browser security restrictions, file:// links cannot be opened directly from web pages. The path has been copied - you can paste it into your file manager.`);
+                              }
+                            }).catch(() => {
+                              alert(`Cannot open file:// link due to browser security.\n\nPath: ${link.url}\n\nPlease copy this path and open it manually in your file manager.`);
+                            });
+                          } else {
+                            alert(`Cannot open file:// link due to browser security.\n\nPath: ${link.url}\n\nPlease copy this path and open it manually in your file manager.`);
+                          }
+                        } else {
+                          window.open(link.url, '_blank', 'noopener,noreferrer');
+                        }
+                      }
+                    }}
                     onDragOver={(e) => handleLinkDragOver(e, link.id)}
                     onDragLeave={handleLinkDragLeave}
                     onDrop={(e) => handleLinkDrop(e, link.id)}
@@ -1113,9 +1093,11 @@ function App() {
                     />
                     {(() => {
                       const domainTag = getDomainTag(link.url);
+                      const domainTagColor = domainTag ? getTagColor(domainTag.toLowerCase(), tagCardinality) : undefined;
                       return domainTag ? (
                         <span 
                           className="link-tag domain-tag"
+                          style={domainTagColor ? { backgroundColor: domainTagColor, cursor: 'pointer' } : { cursor: 'pointer' }}
                           onClick={(e) => {
                             e.stopPropagation();
                             // Open link when domain tag is clicked
@@ -1161,7 +1143,18 @@ function App() {
                         });
                         
                         if (sortedTags.length === 0) {
-                          return <span className="link-tag no-tag">#noTag</span>;
+                          return (
+                            <span 
+                              className="link-tag no-tag"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleLinkClick(link);
+                              }}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              #noTag
+                            </span>
+                          );
                         }
                         
                         return sortedTags.map((tag, idx) => {
@@ -1171,7 +1164,11 @@ function App() {
                             <span 
                               key={idx} 
                               className="link-tag"
-                              style={{ color: tagColor }}
+                              style={{ backgroundColor: tagColor, cursor: 'pointer' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleLinkClick(link);
+                              }}
                             >
                               {tag.startsWith('#') ? tag : `#${tag}`}
                             </span>
@@ -1194,6 +1191,62 @@ function App() {
         </div>
       </main>
       
+      {/* Modal for tag rename confirmation */}
+      {showRenameModal && (
+        <div className="modal-overlay" onClick={handleRenameCancel}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-body">
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '12px', fontWeight: 500 }}>
+                  Rename Tag
+                </div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                  This will rename <strong>#{renameOldTag}</strong> to <strong>#{renameNewTag}</strong>
+                </div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>
+                  {renameAffectedCount} {renameAffectedCount === 1 ? 'link' : 'links'} will be affected.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  className="modal-button cancel"
+                  onClick={handleRenameCancel}
+                  style={{
+                    padding: '8px 16px',
+                    background: 'transparent',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '4px',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="modal-button confirm"
+                  onClick={handleRenameTag}
+                  style={{
+                    padding: '8px 16px',
+                    background: 'var(--accent-color)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: '#ffffff',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: '0.9rem',
+                    fontWeight: 500
+                  }}
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal for adding new links */}
       {showModal && (
         <div className="modal-overlay" onClick={handleModalCancel}>
@@ -1248,7 +1301,7 @@ function App() {
                     }
                   }
                 }}
-                placeholder={fetchingTitle && !editingLinkId ? "fetching title..." : "#tag1 #tag2"}
+                placeholder="#tag1 #tag2"
                 autoFocus
               />
               {showAutocomplete && autocompleteSuggestions.length > 0 && autocompleteInputType === 'modal' && (
