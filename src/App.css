@@ -117,7 +117,8 @@ textarea {
 }
 
 .tag-case-toggle,
-.theme-toggle {
+.theme-toggle,
+.help-toggle {
   background: none;
   border: none;
   padding: 0;
@@ -128,7 +129,8 @@ textarea {
 }
 
 .tag-case-toggle:hover,
-.theme-toggle:hover {
+.theme-toggle:hover,
+.help-toggle:hover {
   color: var(--text-primary);
 }
 
@@ -172,10 +174,13 @@ textarea {
   color: var(--text-tertiary);
   font-size: 0.8rem;
   text-decoration: underline;
+  background: transparent;
+  border: none;
 }
 
 .tag-filter.clear:hover {
   color: var(--text-secondary);
+  background: transparent;
 }
 
 .tag-filter.dragging {

@@ -24,6 +24,7 @@ function App() {
   const [renameOldTag, setRenameOldTag] = useState('');
   const [renameNewTag, setRenameNewTag] = useState('');
   const [renameAffectedCount, setRenameAffectedCount] = useState(0);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const modalTitleRef = useRef(null);
 
   // Handle paste event to open modal
@@ -1327,6 +1328,10 @@ function App() {
       )}
       
       <div className="bottom-controls">
+        <button className="help-toggle" onClick={() => setShowHelpModal(true)} title="Help">
+          help
+        </button>
+        <span className="bottom-controls-separator">|</span>
         <button className="tag-case-toggle" onClick={toggleTagCaseMode} title={`Switch to ${tagCaseMode === 'camelCase' ? 'snake_case' : 'camelCase'}`}>
           {tagCaseMode}
         </button>
@@ -1335,6 +1340,145 @@ function App() {
           {isDarkMode ? 'dark mode' : 'light mode'}
         </button>
       </div>
+
+      {/* Help Modal */}
+      {showHelpModal && (
+        <div className="modal-overlay" onClick={() => setShowHelpModal(false)}>
+          <div className="modal-content help-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '80vh', overflowY: 'auto' }}>
+            <div className="modal-body">
+              <div style={{ marginBottom: '24px' }}>
+                <h2 style={{ fontSize: '1.5rem', color: 'var(--text-primary)', marginBottom: '20px', fontWeight: 600 }}>
+                  Help & Features
+                </h2>
+                
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '12px', fontWeight: 500 }}>
+                    Adding Links
+                  </h3>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • Paste a URL in the search box at the top
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • A modal will open where you can add tags (e.g., <code style={{ background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '3px' }}>#tag1 #tag2</code>)
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                    • Press Enter to save the link
+                  </p>
+                </div>
+
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '12px', fontWeight: 500 }}>
+                    Tags
+                  </h3>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • Click on a tag at the top to filter links by that tag
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • You can select multiple tags to narrow down results
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • Drag and drop tags from the top onto link boxes to add them
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • Click on a tag in a link box to edit that link
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                    • Tag colors indicate their frequency (bluer = more common, greyer = less common)
+                  </p>
+                </div>
+
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '12px', fontWeight: 500 }}>
+                    Domain Tags
+                  </h3>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • Each link automatically gets a domain tag (e.g., <code style={{ background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '3px' }}>@example.com</code>)
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                    • Domain tags can be used for filtering just like regular tags
+                  </p>
+                </div>
+
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '12px', fontWeight: 500 }}>
+                    Search & Filter
+                  </h3>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • Type in the search box to filter links by URL or tags
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • Commands starting with <code style={{ background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '3px' }}>&gt;</code> won't filter links
+                  </p>
+                </div>
+
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '12px', fontWeight: 500 }}>
+                    Commands
+                  </h3>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '12px' }}>
+                    <strong style={{ color: 'var(--text-primary)' }}>Rename Tag:</strong>
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px', paddingLeft: '16px' }}>
+                    Type <code style={{ background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '3px' }}>&gt; rename|#oldTag|#newTag</code> and press Enter
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px', paddingLeft: '16px' }}>
+                    This will rename all instances of the old tag to the new tag across all your links
+                  </p>
+                </div>
+
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '12px', fontWeight: 500 }}>
+                    Tag Case Modes
+                  </h3>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • Toggle between <code style={{ background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '3px' }}>camelCase</code> and <code style={{ background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '3px' }}>snake_case</code>
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                    • Changing the mode automatically converts all existing tags
+                  </p>
+                </div>
+
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '12px', fontWeight: 500 }}>
+                    Other Features
+                  </h3>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • Click on the center of a link box to open the URL
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • Click the × button on a link to delete it
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '8px' }}>
+                    • Links without tags are marked with <code style={{ background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '3px' }}>#noTag</code>
+                  </p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                    • All data is stored locally in your browser
+                  </p>
+                </div>
+
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setShowHelpModal(false)}
+                  style={{
+                    padding: '8px 16px',
+                    background: 'var(--accent-color)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: '#ffffff',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: '0.9rem',
+                    fontWeight: 500
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
