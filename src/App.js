@@ -10,6 +10,7 @@ function App() {
   const [modalUrl, setModalUrl] = useState('');
   const [modalTitle, setModalTitle] = useState('');
   const [modalTags, setModalTags] = useState('');
+  const [modalInputValue, setModalInputValue] = useState('');
   const [fetchingTitle, setFetchingTitle] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -158,6 +159,7 @@ function App() {
         setModalUrl(existingLink.url);
         setModalTitle(existingLink.title);
         setModalTags(tagsDisplay);
+        setModalInputValue(`${existingLink.title}${tagsDisplay ? ' ' + tagsDisplay : ''}`);
         setShowModal(true);
         return;
       }
@@ -167,6 +169,7 @@ function App() {
       setModalUrl(url);
       setModalTitle('');
       setModalTags('');
+      setModalInputValue('');
       setShowModal(true);
       setFetchingTitle(true);
       
@@ -175,6 +178,7 @@ function App() {
         setFetchingTitle(false);
         if (title) {
           setModalTitle(title);
+          setModalInputValue(title);
         }
       }).catch(() => {
         setFetchingTitle(false);
@@ -268,6 +272,7 @@ function App() {
     setModalUrl('');
     setModalTitle('');
     setModalTags('');
+    setModalInputValue('');
   };
   
   // Handle modal cancel
@@ -276,6 +281,7 @@ function App() {
     setModalUrl('');
     setModalTitle('');
     setModalTags('');
+    setModalInputValue('');
     setFetchingTitle(false);
     setEditingLinkId(null);
   };
@@ -439,8 +445,11 @@ function App() {
       textAfterCursor;
     
     if (inputType === 'modal') {
+      // Update the raw input value first
+      setModalInputValue(newText);
+      
       // Parse the combined input to separate title and tags
-      const words = newText.trim().split(/\s+/);
+      const words = newText.match(/\S+/g) || [];
       const titleParts = [];
       const tagParts = [];
       
@@ -547,10 +556,12 @@ function App() {
     const tagsDisplay = link.tags 
       ? link.tags.split(',').map(t => `#${t.trim()}`).join(' ')
       : '';
+    const inputValue = `${link.title}${tagsDisplay ? ' ' + tagsDisplay : ''}`;
     setEditingLinkId(link.id);
     setModalUrl(link.url);
     setModalTitle(link.title);
     setModalTags(tagsDisplay);
+    setModalInputValue(inputValue);
     setShowModal(true);
   };
 
@@ -1139,11 +1150,14 @@ function App() {
                 ref={modalTitleRef}
                 type="text"
                 className="modal-input"
-                value={`${modalTitle}${modalTags ? ' ' + modalTags : ''}`}
+                value={modalInputValue}
                 onChange={(e) => {
                   const value = e.target.value;
-                  // Parse title and tags from combined input
-                  const words = value.trim().split(/\s+/);
+                  // Store the raw input value to preserve spaces
+                  setModalInputValue(value);
+                  
+                  // Parse title and tags for state (used when saving)
+                  const words = value.match(/\S+/g) || [];
                   const titleParts = [];
                   const tagParts = [];
                   
@@ -1155,8 +1169,11 @@ function App() {
                     }
                   });
                   
+                  // Update parsed state for saving
                   setModalTitle(titleParts.join(' '));
                   setModalTags(tagParts.join(' '));
+                  
+                  // Update autocomplete with raw value
                   updateAutocomplete(value, e.target, 'modal');
                 }}
                 onKeyDown={(e) => {
@@ -1178,8 +1195,7 @@ function App() {
                       e.preventDefault();
                       const selectedIndex = autocompleteIndex >= 0 ? autocompleteIndex : 0;
                       const suggestion = autocompleteSuggestions[selectedIndex];
-                      const currentValue = `${modalTitle}${modalTags ? ' ' + modalTags : ''}`;
-                      insertAutocompleteSuggestion(suggestion, currentValue, modalTitleRef.current, 'modal');
+                      insertAutocompleteSuggestion(suggestion, modalInputValue, modalTitleRef.current, 'modal');
                     }
                   }
                 }}
@@ -1193,8 +1209,7 @@ function App() {
                       key={suggestion}
                       className={`autocomplete-item ${index === autocompleteIndex ? 'selected' : ''}`}
                       onClick={() => {
-                        const currentValue = `${modalTitle}${modalTags ? ' ' + modalTags : ''}`;
-                        insertAutocompleteSuggestion(suggestion, currentValue, modalTitleRef.current, 'modal');
+                        insertAutocompleteSuggestion(suggestion, modalInputValue, modalTitleRef.current, 'modal');
                       }}
                       onMouseEnter={() => setAutocompleteIndex(index)}
                     >
